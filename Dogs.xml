@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dogs>
+    <dog>
+        <name>Fido</name>
+        <breed>Golden Retriever</breed>
+    </dog>
+    <dog>
+        <name>Tippy</name>
+        <breed>English Setter/Lab mix</breed>
+    </dog>
+    <cat>
+        <name>Paulie</name>
+        <breed>Big Fat Tabby</breed>
+    </cat>
+    <dog>
+        <name>Archibald</name>
+        <breed>Cardigan Welsh Corgi</breed>
+    </dog>
+</dogs>
