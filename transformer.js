@@ -7,45 +7,101 @@
 
 let parser = new DOMParser();
 
+let document = require('document');
+
+let makeDataId = (function () {
+    let id = 0;
+    return function () {
+        return 'xslt.'+id++;
+    }
+}());
+
 function parseXML (str) {
     return parser.parseFromString(str, 'text/xml');
 }
 
-function transformDocument (xmlData, xslSheets, doc) {
-    let proc = applyXSLSheets(xmlData, xslSheets);
-
-    let observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function (mut) {
-            if (MutationHandlers[mut.type]) {
-                MutationHandlers[mut.type](mut, xmlData, xslSheets);
-            }
-        });
-    });
-
-    // configuration of the observer:
-    let config = {
-        attributes: true,
-        childList: true,
-        characterData: true,
-        subtree: true
-    };
-
-    // pass in the target node, as well as the observer options
-    observer.observe(xmlData, config);
-
-    return proc.transformToFragment(xmlData, doc);
+function parseHTML (str) {
+    return parser.parseFromString(str, 'text/html');
 }
 
-function applyXSLSheets(xmlData, xslSheets) {
-    let proc = new XSLTProcessor();
+class XSLTComponent {
 
-    if (xslSheets instanceof Array === false) {
-        xslSheets = [xslSheets];
+    constructor(xmlDoc) {
+        this.doc = xmlDoc;
     }
 
-    xslSheets.forEach(xslSheet => proc.importStylesheet(xslSheet));
+    bindTemplate(xslDoc) {
+        return new XSLTTemplate(this, xslDoc);
+    }
 
-    return proc;
+    update(xpath, newElem) {
+        let y = this.doc.evaluate(xpath, this.doc, null, XPathResult.ANY_TYPE, null);
+        console.time('new stuff');
+        y.iterateNext().appendChild(newElem.documentElement);
+        console.timeEnd('new stuff');
+    }
+}
+
+class XSLTTemplate {
+
+    constructor(component, xslDoc) {
+        this.proc = new XSLTProcessor;
+        this.component = component;
+        this.xslDoc = xslDoc;
+        this.observer = new TemplateDataMutationObserver(this);
+        this.proc.importStylesheet(this.xslDoc);
+    }
+
+    get component() {
+        return this._component.doc;
+    }
+
+    set component(comp) {
+        this._component = comp;
+    }
+
+    get transformedComponent() {
+        return this._transformedComponent.firstElementChild.cloneNode(true);
+    }
+
+    set transformedComponent(tComp) {
+        this._transformedComponent = tComp;
+    }
+
+    insertInto(elem) {
+        this.transformComponent();
+        this.elem = elem;
+        this.elem.appendChild(this.transformedComponent);
+    }
+
+    transformComponent() {
+        this._transformedComponent = this.proc.transformToFragment(this.component, document);
+        this._transformedComponent.firstElementChild.setAttribute('data-id', makeDataId());
+    }
+
+    updateTransformedComponent() {
+        var oldId = this.transformedComponent.getAttribute('data-id');
+        this.transformComponent();
+        this.elem.replaceChild(this.transformedComponent,
+            this.elem.querySelector('[data-id="'+oldId+'"]'));
+    }
+
+}
+
+class TemplateDataMutationObserver {
+    constructor(xsltTemplate) {
+        this.observer = new MutationObserver(muts => muts.forEach(function (mut) {
+            MutationHandlers[mut.type](this);
+        }, this));
+
+        this.template = xsltTemplate;
+        this.observer.observe(xsltTemplate.component, {
+            attributes: true,
+            childList: true,
+            characterData: true,
+            subtree: true
+        });
+    }
 }
 
 const MutationHandlers = {
@@ -53,12 +109,8 @@ const MutationHandlers = {
         // stub
     },
 
-    childList: function (record, xmlData, xslSheets) {
-        for (var node of record.addedNodes) {
-            let proc = applyXSLSheets(node, xslSheets);
-            proc.transformToFragment(node, xmlData);
-            // OK, now where do we put it?
-        }
+    childList: function (xslt) {
+        xslt.template.updateTransformedComponent();
     },
 
     characterData: function (record) {
@@ -66,7 +118,4 @@ const MutationHandlers = {
     }
 }
 
-module.exports = {
-    parseXML: parseXML,
-    transformDocument: transformDocument
-};
+export { XSLTComponent, parseXML, parseHTML };
